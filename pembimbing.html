@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modul Pensyarah Pembimbing - IABCSBH</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/supabase-config.js"></script>
+</head>
+<body class="bg-slate-100 min-h-screen p-6">
+  <div class="max-w-7xl mx-auto space-y-6">
+    <div class="bg-white p-6 rounded-xl border border-slate-200 flex justify-between items-center shadow-sm">
+      <div>
+        <h1 class="text-xl font-bold text-slate-800">Portal Pensyarah Pembimbing</h1>
+        <p class="text-xs text-slate-500" id="lecturerInfo">Memuatkan...</p>
+      </div>
+      <button onclick="logout()" class="text-xs text-red-600 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50">Log Keluar</button>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div class="p-4 border-b bg-slate-50 font-bold text-slate-700 text-sm">Senarai Peserta Bimbingan Di Bawah Seliaan</div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-100 text-slate-600 uppercase">
+            <tr>
+              <th class="p-3">Peserta Bimbingan</th>
+              <th class="p-3">Sekolah / Sektor</th>
+              <th class="p-3">Coachee</th>
+              <th class="p-3">Dokumentasi</th>
+              <th class="p-3">Status</th>
+              <th class="p-3">Tindakan</th>
+            </tr>
+          </thead>
+          <tbody id="participantRows" class="divide-y divide-slate-200">
+            <tr><td colspan="6" class="text-center p-4">Memuat data penyerahan...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Modal Borang Rubrik Bimbingan -->
+    <div id="evalModal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50">
+      <div class="bg-white max-w-lg w-full rounded-xl p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+        <h3 class="font-bold text-slate-800 text-base" id="modalTitle">Instrumen Bimbingan & Pentaksiran Coach</h3>
+        <form id="evalForm" class="space-y-3 text-xs">
+          <input type="hidden" id="activeSubId">
+          
+          <div>
+            <label class="block font-medium mb-1">1. Etika, Perjanjian & Matlamat Bimbingan (1 - 5):</label>
+            <input type="number" id="sc_ethics" min="1" max="5" required class="w-full border p-2 rounded">
+          </div>
+          <div>
+            <label class="block font-medium mb-1">2. Kemahiran Mendengar Aktif (1 - 5):</label>
+            <input type="number" id="sc_listening" min="1" max="5" required class="w-full border p-2 rounded">
+          </div>
+          <div>
+            <label class="block font-medium mb-1">3. Penyoalan Berkuasa / Berkesan (1 - 5):</label>
+            <input type="number" id="sc_questioning" min="1" max="5" required class="w-full border p-2 rounded">
+          </div>
+          <div>
+            <label class="block font-medium mb-1">4. Mereka Bentuk Pelan Tindakan & Akauntabiliti (1 - 5):</label>
+            <input type="number" id="sc_action" min="1" max="5" required class="w-full border p-2 rounded">
+          </div>
+          <div>
+            <label class="block font-medium mb-1">Ulasan / Maklum Balas Pensyarah Pembimbing:</label>
+            <textarea id="lecturerFeedback" rows="3" class="w-full border p-2 rounded" placeholder="Nyatakan kekuatan dan aspek penambahbaikan peserta bimbingan..."></textarea>
+          </div>
+          <div>
+            <label class="block font-medium mb-1">Keputusan Bimbingan:</label>
+            <select id="finalVerdict" class="w-full border p-2 rounded">
+              <option value="Kompeten/Lulus">Kompeten / Lulus</option>
+              <option value="Belum Kompeten/Ulang">Belum Kompeten / Ulang Sesi</option>
+            </select>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" onclick="closeModal()" class="px-3 py-1.5 border rounded">Batal</button>
+            <button type="submit" class="px-4 py-1.5 bg-blue-600 text-white font-medium rounded hover:bg-blue-700">Simpan Keputusan</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const user = JSON.parse(localStorage.getItem('iab_user'));
+    if (!user || user.role !== 'coach_lecturer') window.location.href = '../index.html';
+
+    document.getElementById('lecturerInfo').innerText = `${user.full_name} | Pensyarah Pembimbing`;
+
+    async function fetchSubmissions() {
+      const { data, error } = await supabase
+        .from('submissions')
+        .select('*, profiles!submissions_participant_id_fkey(full_name, organization, ic_number)')
+        .eq('assigned_lecturer_id', user.id);
+
+      const tbody = document.getElementById('participantRows');
+      tbody.innerHTML = '';
+
+      if (error || !data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center p-4 text-slate-400">Tiada peserta bimbingan diagihkan kepada anda setakat ini.</td></tr>';
+        return;
+      }
+
+      data.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="p-3 font-semibold text-slate-800">${item.profiles?.full_name || '-'}<br><span class="text-slate-400 font-normal">${item.profiles?.ic_number || ''}</span></td>
+          <td class="p-3">${item.profiles?.organization || '-'}</td>
+          <td class="p-3">${item.coachee_name} (${item.coaching_hours} jam)</td>
+          <td class="p-3 space-x-2">
+            <a href="${item.document_url}" target="_blank" class="text-blue-600 underline">Lihat PDF</a>
+            ${item.media_url ? `<a href="${item.media_url}" target="_blank" class="text-indigo-600 underline">Rakaman</a>` : ''}
+          </td>
+          <td class="p-3"><span class="px-2 py-0.5 rounded text-xs bg-slate-100">${item.status}</span></td>
+          <td class="p-3">
+            <button onclick="openModal('${item.id}', '${item.profiles?.full_name}')" class="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded">Bimbing & Taksir</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function openModal(submissionId, participantName) {
+      document.getElementById('activeSubId').value = submissionId;
+      document.getElementById('modalTitle').innerText = `Bimbingan & Pentaksiran: ${participantName}`;
+      document.getElementById('evalModal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('evalModal').classList.add('hidden');
+    }
+
+    document.getElementById('evalForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const subId = document.getElementById('activeSubId').value;
+      const verdict = document.getElementById('finalVerdict').value;
+
+      const { error: evalError } = await supabase.from('evaluations').insert([{
+        submission_id: subId,
+        lecturer_id: user.id,
+        score_ethics: parseInt(document.getElementById('sc_ethics').value),
+        score_listening: parseInt(document.getElementById('sc_listening').value),
+        score_questioning: parseInt(document.getElementById('sc_questioning').value),
+        score_action_plan: parseInt(document.getElementById('sc_action').value),
+        lecturer_feedback: document.getElementById('lecturerFeedback').value,
+        final_result: verdict
+      }]);
+
+      if (evalError) {
+        alert("Ralat menyimpan: " + evalError.message);
+        return;
+      }
+
+      await supabase.from('submissions').update({
+        status: verdict === 'Kompeten/Lulus' ? 'Lulus' : 'Perlu Pembetulan'
+      }).eq('id', subId);
+
+      alert("Keputusan bimbingan berjaya direkodkan!");
+      closeModal();
+      fetchSubmissions();
+    });
+
+    function logout() {
+      localStorage.removeItem('iab_user');
+      window.location.href = '../index.html';
+    }
+
+    fetchSubmissions();
+  </script>
+</body>
+</html>
