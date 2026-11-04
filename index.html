@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Portal Persediaan Coach IAB Sabah</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Supabase JS Library -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/supabase-config.js"></script>
 </head>
 <body class="bg-slate-100 min-h-screen flex items-center justify-center p-4">
   <div class="max-w-md w-full bg-white rounded-xl shadow-lg p-8 border border-slate-200">
@@ -23,7 +23,7 @@
       <button onclick="handleLogin()" id="loginBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg text-sm transition">
         Log Masuk
       </button>
-      <p id="msg" class="text-xs text-center text-red-500 hidden"></p>
+      <div id="msg" class="text-xs text-center p-2 rounded hidden"></div>
     </div>
 
     <div class="mt-6 border-t pt-4 text-xs text-slate-400 text-center">
@@ -32,39 +32,84 @@
   </div>
 
   <script>
+    // MASUKKAN MAKLUMAT PROJEK SUPABASE ANDA DI SINI
+    const SUPABASE_URL = "https://PROJECT_ID.supabase.co"; // Gantikan PROJECT_ID anda
+    const SUPABASE_ANON_KEY = "PUBLIC_ANON_KEY";           // Gantikan PUBLIC_ANON_KEY anda
+
+    let client;
+    try {
+      client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } catch (e) {
+      console.error("Gagal initialize Supabase:", e);
+    }
+
     async function handleLogin() {
-      const email = document.getElementById('userEmail').value.trim().toLowerCase();
+      const emailInput = document.getElementById('userEmail');
+      const email = emailInput.value.trim().toLowerCase();
       const msg = document.getElementById('msg');
       const btn = document.getElementById('loginBtn');
-      if (!email) return;
+
+      if (!email) {
+        showError("Sila masukkan e-mel anda.");
+        return;
+      }
 
       btn.disabled = true;
       btn.innerText = "Memeriksa akaun...";
       msg.classList.add('hidden');
 
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('email', email)
-        .single();
+      try {
+        if (!client) {
+          throw new Error("Kunci SUPABASE_URL atau SUPABASE_ANON_KEY belum digantikan.");
+        }
 
-      if (error || !data) {
-        msg.innerText = "E-mel tidak dijumpai dalam pangkalan data. Hubungi Urusetia IABCSBH.";
-        msg.classList.remove('hidden');
-        btn.disabled = false;
-        btn.innerText = "Log Masuk";
-        return;
+        const { data, error } = await client
+          .from('profiles')
+          .select('*')
+          .eq('email', email)
+          .maybeSingle();
+
+        if (error) {
+          throw error;
+        }
+
+        if (!data) {
+          showError("E-mel tidak dijumpai. Sila pastikan e-mel telah dimasukkan ke jadual 'profiles' di Supabase.");
+          resetBtn();
+          return;
+        }
+
+        // Simpan maklumat sesi
+        localStorage.setItem('iab_user', JSON.stringify(data));
+
+        // Halakan mengikut peranan
+        if (data.role === 'participant') {
+          window.location.href = 'participant/dashboard.html';
+        } else if (data.role === 'coach_lecturer') {
+          window.location.href = 'lecturer/dashboard.html';
+        } else if (data.role === 'admin') {
+          window.location.href = 'admin/dashboard.html';
+        } else {
+          showError("Peranan pengguna (" + data.role + ") tidak sah.");
+          resetBtn();
+        }
+
+      } catch (err) {
+        showError("Ralat Sistem: " + (err.message || err));
+        resetBtn();
       }
+    }
 
-      localStorage.setItem('iab_user', JSON.stringify(data));
+    function showError(text) {
+      const msg = document.getElementById('msg');
+      msg.innerText = text;
+      msg.className = "text-xs text-center p-2 rounded bg-red-100 text-red-700 block";
+    }
 
-      if (data.role === 'participant') {
-        window.location.href = 'participant/dashboard.html';
-      } else if (data.role === 'coach_lecturer') {
-        window.location.href = 'lecturer/dashboard.html';
-      } else if (data.role === 'admin') {
-        window.location.href = 'admin/dashboard.html';
-      }
+    function resetBtn() {
+      const btn = document.getElementById('loginBtn');
+      btn.disabled = false;
+      btn.innerText = "Log Masuk";
     }
   </script>
 </body>
