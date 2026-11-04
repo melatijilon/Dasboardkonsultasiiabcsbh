@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modul Peserta Bimbingan - IABCSBH</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/supabase-config.js"></script>
+</head>
+<body class="bg-slate-50 min-h-screen p-6">
+  <div class="max-w-4xl mx-auto space-y-6">
+    <div class="bg-white p-6 rounded-xl border border-slate-200 flex justify-between items-center shadow-sm">
+      <div>
+        <h1 class="text-xl font-bold text-slate-800" id="participantName">Memuatkan...</h1>
+        <p class="text-xs text-slate-500" id="participantMeta"></p>
+      </div>
+      <button onclick="logout()" class="text-xs text-red-600 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50">Log Keluar</button>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="md:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+        <h2 class="font-bold text-slate-800 text-base mb-4">Penyerahan Dokumentasi Bimbingan</h2>
+        <form id="submissionForm" class="space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Kohort</label>
+              <select id="cohort" class="w-full border rounded-lg p-2 text-sm">
+                <option value="Kohort 1/2026">Kohort 1/2026</option>
+                <option value="Kohort 2/2026">Kohort 2/2026</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Jumlah Jam Sesi</label>
+              <input type="number" id="hours" step="0.5" required placeholder="Cth: 6" class="w-full border rounded-lg p-2 text-sm">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Nama Coachee</label>
+              <input type="text" id="coacheeName" required class="w-full border rounded-lg p-2 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Jawatan Coachee</label>
+              <input type="text" id="coacheePosition" required placeholder="Cth: Penolong Kanan Pentadbiran" class="w-full border rounded-lg p-2 text-sm">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Pautan Rakaman Video/Audio (Drive / YouTube Unlisted)</label>
+            <input type="url" id="mediaUrl" placeholder="https://..." class="w-full border rounded-lg p-2 text-sm">
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Fail Dokumentasi Lengkap (PDF Sahaja)</label>
+            <input type="file" id="docPdf" accept=".pdf" required class="w-full border rounded-lg p-2 text-sm bg-slate-50">
+          </div>
+
+          <button type="submit" id="btnSubmit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg text-sm transition">
+            Hantar Dokumentasi
+          </button>
+        </form>
+      </div>
+
+      <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <h2 class="font-bold text-slate-800 text-base">Status Penilaian & Maklum Balas</h2>
+        <div id="statusBox" class="p-4 rounded-lg bg-slate-100 text-xs space-y-2">
+          <p class="text-slate-500">Memeriksa rekod...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const user = JSON.parse(localStorage.getItem('iab_user'));
+    if (!user || user.role !== 'participant') window.location.href = '../index.html';
+
+    document.getElementById('participantName').innerText = user.full_name;
+    document.getElementById('participantMeta').innerText = `${user.ic_number} | ${user.organization}`;
+
+    async function loadStatus() {
+      const { data, error } = await supabase
+        .from('submissions')
+        .select('*, evaluations(*), profiles!submissions_assigned_lecturer_id_fkey(full_name)')
+        .eq('participant_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      const box = document.getElementById('statusBox');
+      if (error || !data) {
+        box.innerHTML = `<p class="text-slate-500">Belum ada dokumentasi dihantar.</p>`;
+        return;
+      }
+
+      const ev = data.evaluations && data.evaluations[0];
+      const lecturerName = data.profiles ? data.profiles.full_name : 'Belum ditetapkan';
+
+      box.innerHTML = `
+        <div class="font-semibold text-slate-700">Status Semasa:</div>
+        <div class="inline-block px-2.5 py-1 rounded font-bold ${data.status === 'Lulus' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}">${data.status}</div>
+        <div class="text-slate-600 mt-2">Pensyarah Pembimbing: <b>${lecturerName}</b></div>
+        <div class="text-slate-600">Tarikh Hantar: ${new Date(data.created_at).toLocaleDateString('ms-MY')}</div>
+        ${ev ? `
+          <hr class="my-2"/>
+          <div class="font-semibold text-slate-800">Skor Bimbingan: ${ev.total_score} / 20</div>
+          <div class="text-slate-600">Keputusan: <b>${ev.final_result}</b></div>
+          <div class="text-slate-600 italic">Ulasan Pensyarah Pembimbing: "${ev.lecturer_feedback || '-'}"</div>
+        ` : '<p class="text-slate-400 mt-2">Menunggu semakan Pensyarah Pembimbing.</p>'}
+      `;
+    }
+
+    document.getElementById('submissionForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('btnSubmit');
+      btn.disabled = true;
+      btn.innerText = "Memuat naik dokumentasi...";
+
+      try {
+        const file = document.getElementById('docPdf').files[0];
+        const filePath = `${user.ic_number}_${Date.now()}.pdf`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('coaching-docs')
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: publicUrlData } = supabase.storage
+          .from('coaching-docs')
+          .getPublicUrl(filePath);
+
+        const { error: insertError } = await supabase.from('submissions').insert([{
+          participant_id: user.id,
+          cohort: document.getElementById('cohort').value,
+          coaching_hours: document.getElementById('hours').value,
+          coachee_name: document.getElementById('coacheeName').value,
+          coachee_position: document.getElementById('coacheePosition').value,
+          media_url: document.getElementById('mediaUrl').value,
+          document_url: publicUrlData.publicUrl,
+          status: 'Dihantar'
+        }]);
+
+        if (insertError) throw insertError;
+
+        alert("Dokumentasi berjaya dihantar ke Jabatan Konsultasi IABCSBH!");
+        loadStatus();
+      } catch (err) {
+        alert("Ralat semasa muat naik: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "Hantar Dokumentasi";
+      }
+    });
+
+    function logout() {
+      localStorage.removeItem('iab_user');
+      window.location.href = '../index.html';
+    }
+
+    loadStatus();
+  </script>
+</body>
+</html>
