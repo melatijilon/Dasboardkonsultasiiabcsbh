@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modul Pentadbir (Admin) - IABCSBH</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/supabase-config.js"></script>
+</head>
+<body class="bg-slate-100 min-h-screen p-6">
+  <div class="max-w-7xl mx-auto space-y-6">
+    <div class="bg-white p-6 rounded-xl border border-slate-200 flex justify-between items-center shadow-sm">
+      <div>
+        <h1 class="text-xl font-bold text-slate-800">Panel Pentadbir Jabatan Konsultasi</h1>
+        <p class="text-xs text-slate-500">Agihan Pensyarah Pembimbing & Pengesahan Keputusan Bimbingan</p>
+      </div>
+      <button onclick="logout()" class="text-xs text-red-600 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50">Log Keluar</button>
+    </div>
+
+    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+      <div class="flex justify-between items-center">
+        <h2 class="font-bold text-slate-800 text-sm">Semua Penyerahan Peserta Bimbingan</h2>
+        <button onclick="loadAdminData()" class="text-xs bg-slate-800 text-white px-3 py-1.5 rounded">Muat Semula</button>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-200 text-slate-700 uppercase">
+            <tr>
+              <th class="p-3">Peserta Bimbingan & K/P</th>
+              <th class="p-3">Kohort</th>
+              <th class="p-3">Fail PDF</th>
+              <th class="p-3">Pensyarah Pembimbing</th>
+              <th class="p-3">Status</th>
+              <th class="p-3">Tindakan Agihan</th>
+            </tr>
+          </thead>
+          <tbody id="adminTable" class="divide-y divide-slate-200">
+            <tr><td colspan="6" class="text-center p-4">Memuat data keseluruhan...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const user = JSON.parse(localStorage.getItem('iab_user'));
+    if (!user || user.role !== 'admin') window.location.href = '../index.html';
+
+    let lecturers = [];
+
+    async function loadAdminData() {
+      // 1. Dapatkan senarai pensyarah pembimbing
+      const { data: lecturerList } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .eq('role', 'coach_lecturer');
+      lecturers = lecturerList || [];
+
+      // 2. Dapatkan senarai penyerahan peserta bimbingan
+      const { data, error } = await supabase
+        .from('submissions')
+        .select('*, profiles!submissions_participant_id_fkey(full_name, ic_number)')
+        .order('created_at', { ascending: false });
+
+      const tbody = document.getElementById('adminTable');
+      tbody.innerHTML = '';
+
+      if (error || !data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center p-4 text-slate-400">Tiada rekod penyerahan ditemui.</td></tr>';
+        return;
+      }
+
+      data.forEach(item => {
+        const tr = document.createElement('tr');
+        
+        let options = `<option value="">-- Pilih Pensyarah Pembimbing --</option>`;
+        lecturers.forEach(l => {
+          options += `<option value="${l.id}" ${item.assigned_lecturer_id === l.id ? 'selected' : ''}>${l.full_name}</option>`;
+        });
+
+        tr.innerHTML = `
+          <td class="p-3 font-semibold">${item.profiles?.full_name}<br><span class="text-slate-400 font-normal">${item.profiles?.ic_number}</span></td>
+          <td class="p-3">${item.cohort}</td>
+          <td class="p-3"><a href="${item.document_url}" target="_blank" class="text-blue-600 underline">Buka PDF</a></td>
+          <td class="p-3">
+            <select onchange="assignLecturer('${item.id}', this.value)" class="border p-1 rounded text-xs">
+              ${options}
+            </select>
+          </td>
+          <td class="p-3"><span class="px-2 py-0.5 rounded text-xs bg-slate-100 font-medium">${item.status}</span></td>
+          <td class="p-3 text-slate-400">Automatik dikemas kini</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function assignLecturer(submissionId, lecturerId) {
+      if (!lecturerId) return;
+      const { error } = await supabase
+        .from('submissions')
+        .update({ assigned_lecturer_id: lecturerId, status: 'Sedang Dibimbing' })
+        .eq('id', submissionId);
+
+      if (error) {
+        alert("Ralat mengagihkan pensyarah pembimbing: " + error.message);
+      } else {
+        alert("Pensyarah Pembimbing berjaya ditugaskan!");
+        loadAdminData();
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem('iab_user');
+      window.location.href = '../index.html';
+    }
+
+    loadAdminData();
+  </script>
+</body>
+</html>
