@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portal Persediaan Coach IAB Sabah</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+</head>
+<body class="bg-slate-100 min-h-screen flex items-center justify-center p-4">
+  <div class="max-w-md w-full bg-white rounded-xl shadow-lg p-8 border border-slate-200">
+    <div class="text-center mb-6">
+      <h1 class="text-xl font-bold text-slate-800">Jabatan Konsultasi IAB Sabah</h1>
+      <p class="text-xs text-slate-500 mt-1">Sistem Pengurusan Dokumentasi Kursus Persediaan Coach</p>
+    </div>
+
+    <div class="space-y-4">
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">E-mel Berdaftar</label>
+        <input type="email" id="userEmail" placeholder="contoh: peserta@moe-dl.edu.my" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+      </div>
+      <button onclick="handleLogin()" id="loginBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg text-sm transition">
+        Log Masuk
+      </button>
+      <p id="msg" class="text-xs text-center text-red-500 hidden"></p>
+    </div>
+
+    <div class="mt-6 border-t pt-4 text-xs text-slate-400 text-center">
+      Peserta Bimbingan, Pensyarah Pembimbing, dan Pentadbir menggunakan e-mel berdaftar untuk pengesahan akses.
+    </div>
+  </div>
+
+  <script>
+    async function handleLogin() {
+      const email = document.getElementById('userEmail').value.trim().toLowerCase();
+      const msg = document.getElementById('msg');
+      const btn = document.getElementById('loginBtn');
+      if (!email) return;
+
+      btn.disabled = true;
+      btn.innerText = "Memeriksa akaun...";
+      msg.classList.add('hidden');
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email', email)
+        .single();
+
+      if (error || !data) {
+        msg.innerText = "E-mel tidak dijumpai dalam pangkalan data. Hubungi Urusetia IABCSBH.";
+        msg.classList.remove('hidden');
+        btn.disabled = false;
+        btn.innerText = "Log Masuk";
+        return;
+      }
+
+      localStorage.setItem('iab_user', JSON.stringify(data));
+
+      if (data.role === 'participant') {
+        window.location.href = 'participant/dashboard.html';
+      } else if (data.role === 'coach_lecturer') {
+        window.location.href = 'lecturer/dashboard.html';
+      } else if (data.role === 'admin') {
+        window.location.href = 'admin/dashboard.html';
+      }
+    }
+  </script>
+</body>
+</html>
